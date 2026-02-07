@@ -71,3 +71,5 @@ jobs:
             ${{ secrets.DOCKER_USERNAME }}/archnets-server:latest
             ${{ secrets.DOCKER_USERNAME }}/archnets-server:${{ env.VERSION }}
             ${{ secrets.DOCKER_USERNAME }}/archnets-server:${{ env.VERSION }}-${{ env.GIT_SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
