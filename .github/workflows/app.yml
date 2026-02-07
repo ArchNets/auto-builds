@@ -1,0 +1,62 @@
+name: Build Mobile App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # This follows the pattern from ArchNet-app/build-public.yml
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure git for private submodules
+        run: |
+          git config --global url."https://${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+        with:
+          repository: EbadiDev/archnet-application
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          submodules: "recursive"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.35.3
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+
+      - name: bash scripts/prepare.sh android
+        run: bash scripts/prepare.sh android
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Decode keystore and properties
+        run: |
+          echo "${{ secrets.KEYSTORE_JKS_PROD }}" | base64 --decode > android/app/keystore.jks
+          echo "${{ secrets.KEY_PROPERTIES_PROD }}" | base64 --decode > android/key.properties
+
+      - uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27
+          link-to-sdk: true
+
+      - name: Build Android APK
+        run: flutter build apk --release --split-per-abi --flavor apilatest
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: archnet-android
+          path: build/app/outputs/flutter-apk
