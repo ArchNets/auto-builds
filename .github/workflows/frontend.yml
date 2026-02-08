@@ -1,0 +1,80 @@
+name: Build Frontend
+
+on:
+  repository_dispatch:
+    types: [build-frontend]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, Tag or Commit SHA to build from (e.g. v1.2.11 or master)"
+        required: true
+        default: "master"
+      tag:
+        description: "Docker image tag (e.g. 1.2.11). If 'latest', it tries to detect from git tags."
+        required: true
+        default: "latest"
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [admin, user, landing, webapp, reseller]
+
+    steps:
+      - name: Configure git for private access
+        run: |
+          git config --global url."https://${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/".insteadOf "git@github.com:"
+
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+        with:
+          repository: ArchNets/Frontend
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          ref: ${{ github.event.inputs.ref || 'master' }}
+          submodules: "recursive"
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_ENV
+          elif [[ "${{ github.event.inputs.tag }}" != "latest" ]]; then
+            echo "VERSION=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//' || echo '0.0.0')" >> $GITHUB_ENV
+          fi
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "latest"
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build ${{ matrix.app }} app
+        run: bun run build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/${{ matrix.app }}/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/wrne1mvx-${{ matrix.app }}:latest
+            ${{ secrets.DOCKER_USERNAME }}/wrne1mvx-${{ matrix.app }}:${{ env.VERSION }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
