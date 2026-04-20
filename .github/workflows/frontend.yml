@@ -8,7 +8,7 @@ on:
       ref:
         description: "Branch, Tag or Commit SHA to build from (e.g. v1.2.11 or master)"
         required: true
-        default: "master"
+        default: "main"
       tag:
         description: "Docker image tag (e.g. 1.2.11). If 'latest', it tries to detect from git tags."
         required: true
@@ -31,7 +31,7 @@ jobs:
         with:
           repository: ArchNets/Frontend
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
-          ref: ${{ github.event.inputs.ref || 'master' }}
+          ref: ${{ github.event.inputs.ref || 'main' }}
           submodules: "recursive"
           fetch-depth: 0
 
@@ -55,6 +55,13 @@ jobs:
         run: bun install
 
       - name: Build ${{ matrix.app }} app
+        env:
+          # Build with RUNTIME_* placeholders — entrypoint.sh replaces at container startup
+          NEXT_PUBLIC_API_URL: RUNTIME_NEXT_PUBLIC_API_URL
+          NEXT_PUBLIC_WEB_URL: RUNTIME_NEXT_PUBLIC_WEB_URL
+          NEXT_PUBLIC_PANEL_URL: RUNTIME_NEXT_PUBLIC_PANEL_URL
+          NEXT_PUBLIC_BASE_PATH: RUNTIME_NEXT_PUBLIC_BASE_PATH
+          NEXT_PUBLIC_TG_BOT: RUNTIME_NEXT_PUBLIC_TG_BOT
         run: bun run build
 
       - name: Set up Docker Buildx
